@@ -28,7 +28,7 @@ fn decay_divisor(r: u32, p: &MarathonDecayParams) -> f64 {
     let rf = r as f64;
     let base = 1.0 + p.b * rf.powf(p.q);
     if r >= p.double_at {
-        1.3 * base
+        2.0 * base
     } else {
         base
     }

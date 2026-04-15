@@ -451,15 +451,6 @@ impl OsuPpInner {
             multiplier *= 1.0 - (self.attrs.n_spinners as f64 / total_hits).powf(0.85);
         }
         
-        // * Similar to ccv3 (akat based)
-        if self.mods.rx() {
-            multiplier *= relax_base_nerf;
-        }
-
-        if self.mods.rx() && self.effective_miss_count >= 5.0 {
-            multiplier *= relax_base_nerf - 0.1;
-        }
-
         if self.mods.rx() {
             // * https://www.desmos.com/calculator/bc9eybdthb
             // * we use OD13.3 as maximum since it's the value at which great hitwidow becomes 0
