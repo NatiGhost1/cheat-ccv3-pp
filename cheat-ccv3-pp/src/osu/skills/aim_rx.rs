@@ -1,6 +1,6 @@
 // Relax-specific aim evaluator for cheat-ccv3-pp.
 //
-// Port of aim_rx.rs from akatsuki-pp-rs CC V3. Adapted for this crate's
+// Port of aim_rx.rs from combo-consistency-v3-pp. Adapted for this crate's
 // API: fields on curr.dists.*, previous() as a free function, no FloatExt.
 
 use std::f64::consts::{FRAC_PI_2, PI};

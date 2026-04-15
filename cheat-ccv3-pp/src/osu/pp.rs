@@ -486,7 +486,7 @@ impl OsuPpInner {
         let acc_value = self.compute_accuracy_value();
         let mut flashlight_value = self.compute_flashlight_value();
 
-        // CC V3: Relax marathon decay — applied to aim and flashlight on RX.
+        // CC V3: Relax marathon decay — applied to flashlight on RX.
         if self.mods.rx() {
             let params = crate::osu::marathon::MarathonDecayParams::default();
             let mult = crate::osu::marathon::relax_marathon_multiplier(
@@ -494,15 +494,42 @@ impl OsuPpInner {
                 &params,
             );
             flashlight_value *= mult;
-            // aim_value already has the RX evaluator applied at the strain level;
-            // marathon decay stacks on top for length punishment.
-            // Note: aim_value is immutable here so we apply it in the final combine.
         }
 
-        // CC V3: miss-only combo scaling replaces vanilla combo scaling on aim+speed.
-        // Vanilla's get_combo_scaling_factor() is ONLY kept for flashlight.
-        // The miss multiplier applies the consistency model: p^(misses^exp).
-        let cc_miss_mult = self.cc_v3_miss_multiplier();
+        // CC V3: combo-based miss scaling.
+        // 0 misses = no combo penalty at all (FC = full credit).
+        // 1+ misses = vanilla combo scaling (player_combo / max_combo)^0.8.
+        // 4-mod (DT+FL+HD+HR): effective_miss_count pinned to raw n_misses,
+        //   plus short_map_tax applied.
+        let is_4mod = self.mods.dt() && self.mods.fl() && self.mods.hd() && self.mods.hr();
+
+        // For 4-mod, the miss count that matters is raw misses only
+        let miss_count = if is_4mod {
+            self.state.n_misses as f64
+        } else {
+            self.effective_miss_count
+        };
+
+        let miss_combo_mult = if miss_count <= 0.0 {
+            // FC: no combo penalty
+            1.0
+        } else {
+            // 1+ misses: scale by (player_combo / max_combo)^0.8
+            if self.attrs.max_combo > 0 {
+                ((self.state.max_combo as f64).powf(0.8)
+                    / (self.attrs.max_combo as f64).powf(0.8))
+                    .min(1.0)
+            } else {
+                1.0
+            }
+        };
+
+        // 4-mod gets short map tax (stacks on top of combo scaling)
+        let four_mod_tax = if is_4mod {
+            short_map_tax(self.attrs.max_combo)
+        } else {
+            1.0
+        };
 
         let pp = (aim_value.powf(1.1)
             + speed_value.powf(1.1)
@@ -510,7 +537,8 @@ impl OsuPpInner {
             + flashlight_value.powf(1.1))
         .powf(1.0 / 1.1)
             * multiplier
-            * cc_miss_mult;
+            * miss_combo_mult
+            * four_mod_tax;
 
         OsuPerformanceAttributes {
             difficulty: self.attrs,
@@ -741,51 +769,16 @@ impl OsuPpInner {
         }
     }
 
-    /// CC V3 miss-only combo scaling. Replaces vanilla's combo-position-based
-    /// scaling with a miss-count exponential: p^(misses^exp).
-    fn cc_v3_miss_multiplier(&self) -> f64 {
-        let misses = self.effective_miss_count;
-        if misses <= 0.0 {
-            return 1.0;
-        }
-
-        let mut p: f64 = 0.998;
-
-        // Mod-specific p adjustments
-        if self.mods.rx() { p -= 0.02; }
-        if self.mods.dt() && self.mods.hr() { p += 0.0025; }
-        if self.mods.dt() && self.mods.ez() { p += 0.0028; }
-
-        // Short map farm nerf
-        if self.attrs.max_combo <= 500 && self.mods.dt() { p -= 0.02; }
-        if self.attrs.max_combo <= 500 && self.mods.dt() && self.mods.hr() { p -= 0.01; }
-        if self.attrs.max_combo <= 500 && self.mods.rx() { p -= 0.03; }
-
-        // Stepped miss exponent
-        let miss_exp = if misses >= 14.0 { 2.4 }
-            else if misses >= 6.0 { 2.3 }
-            else if misses >= 4.0 { 2.1 }
-            else if misses >= 2.0 { 1.7 }
-            else { 1.5 };
-
-        // Gentler variant for 2000+ combo marathons
-        let mara_miss_exp = if misses >= 16.0 { 2.3 }
-            else if misses >= 6.0 { 2.1 }
-            else if misses >= 4.0 { 1.9 }
-            else { 1.5 };
-
-        let miss_weight = if self.attrs.max_combo >= 2000 {
-            misses.powf(mara_miss_exp)
-        } else {
-            misses.powf(miss_exp)
-        };
-
-        p.powf(miss_weight)
-    }
-
     fn total_hits(&self) -> f64 {
         self.state.total_hits() as f64
     }
+}
+
+// CC V3: short map tax for 4-mod scores.
+// Smooth ramp from 0.5 (at max_combo 0) toward 1.0 (long maps).
+fn short_map_tax(max_combo: usize) -> f64 {
+    let m = max_combo as f64;
+    0.5 + 0.5 * (m / (m + 250.0))
 }
 
 fn calculate_effective_misses(attrs: &OsuDifficultyAttributes, state: &OsuScoreState) -> f64 {
