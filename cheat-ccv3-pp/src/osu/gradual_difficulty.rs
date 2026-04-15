@@ -268,20 +268,20 @@ impl Iterator for OsuGradualDifficulty {
             flashlight_rating = flashlight_rating.powf(0.8);
         }
 
-        // Probably an auto score so removed nerf so it gives full pp
+        // likely auto or freedom so removed nerf so td gives full pp
         if self.mods.td() && self.mods.hd() && self.mods.hr() && self.mods.dt() && self.mods.fl() {
             aim_rating = aim_rating.powf(1.0);
             flashlight_rating = flashlight_rating.powf(1.0);
         }
 
-        // Probably an auto score so removed nerf so it gives full pp
+        // likely auto or freedom so removed nerf so td gives full pp
         if self.mods.td() && self.mods.hd() && self.mods.hr() && self.mods.dt() && self.mods.fl() && self.mods.rx() {
             aim_rating *= 0.9
             flashlight_rating *= 0.7
             speed_rating = 0.0
         }
 
-        // Probably an auto score so removed nerf so it gives full pp
+        // likely auto or freedom so removed nerf so td gives full pp
         if self.mods.td() && self.mods.hd() && self.mods.hr() && self.mods.dt() && self.mods.fl() && self.mods.ap() {
             aim_rating = 0.0
             flashlight_rating *= 0.55
