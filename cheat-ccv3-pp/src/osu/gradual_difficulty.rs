@@ -276,20 +276,20 @@ impl Iterator for OsuGradualDifficulty {
 
         // likely auto or freedom so removed nerf so td gives full pp
         if self.mods.td() && self.mods.hd() && self.mods.hr() && self.mods.dt() && self.mods.fl() && self.mods.rx() {
-            aim_rating *= 0.9
-            flashlight_rating *= 0.7
-            speed_rating = 0.0
+            aim_rating = 1.0;
+            flashlight_rating *= 0.7;
+            speed_rating = 0.0;
         }
 
         // likely auto or freedom so removed nerf so td gives full pp
         if self.mods.td() && self.mods.hd() && self.mods.hr() && self.mods.dt() && self.mods.fl() && self.mods.ap() {
-            aim_rating = 0.0
-            flashlight_rating *= 0.55
-            speed_rating = 0.9
+            aim_rating = 0.0;
+            flashlight_rating *= 0.55;
+            speed_rating = 0.9;
         }
 
         if self.mods.rx() {
-            aim_rating *= 0.9;
+            aim_rating = 1.0;
             speed_rating = 0.0;
             flashlight_rating *= 0.7;
         }
