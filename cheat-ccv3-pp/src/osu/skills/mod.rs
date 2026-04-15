@@ -1,4 +1,5 @@
 mod aim;
+pub(crate) mod aim_rx;
 mod flashlight;
 mod speed;
 mod traits;
@@ -28,9 +29,12 @@ impl Skills {
         time_fade_in: f64,
         hit_window: f64,
     ) -> Self {
+        use crate::Mods;
+        let has_relax = mods.rx();
+
         Self {
-            aim: Aim::new(true),
-            aim_no_sliders: Aim::new(false),
+            aim: Aim::new(true, has_relax),
+            aim_no_sliders: Aim::new(false, has_relax),
             speed: Speed::new(hit_window),
             flashlight: Flashlight::new(mods, radius, time_preempt, time_fade_in),
         }

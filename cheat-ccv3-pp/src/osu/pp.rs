@@ -441,7 +441,7 @@ impl OsuPpInner {
         let total_hits = total_hits as f64;
 
         let mut multiplier = PERFORMANCE_BASE_MULTIPLIER;
-        let mut relax_base_nerf = 1.15 * 0.86
+        let relax_base_nerf = 1.15 * 0.86;
 
         if self.mods.nf() {
             multiplier *= (1.0 - 0.02 * self.effective_miss_count).max(0.9);
@@ -453,11 +453,11 @@ impl OsuPpInner {
         
         // * Similar to ccv3 (akat based)
         if self.mods.rx() {
-            multiplier *= relax_base_nerf
+            multiplier *= relax_base_nerf;
         }
 
-        if self.mods.rx() && self.effective_miss_count >= 5 {
-            multiplier *= relax_base_nerf - 0.1
+        if self.mods.rx() && self.effective_miss_count >= 5.0 {
+            multiplier *= relax_base_nerf - 0.1;
         }
 
         if self.mods.rx() {
@@ -476,8 +476,7 @@ impl OsuPpInner {
             // * As we're adding Oks and Mehs to an approximated number of combo breaks the result can be
             // * higher than total hits in specific scenarios (which breaks some calculations) so we need to clamp it.
             self.effective_miss_count = (self.effective_miss_count
-                + self.state.n100 as f64
-                + n100_mult
+                + self.state.n100 as f64 * n100_mult
                 + self.state.n50 as f64 * n50_mult)
                 .min(total_hits);
         }
@@ -485,14 +484,33 @@ impl OsuPpInner {
         let aim_value = self.compute_aim_value();
         let speed_value = self.compute_speed_value();
         let acc_value = self.compute_accuracy_value();
-        let flashlight_value = self.compute_flashlight_value();
+        let mut flashlight_value = self.compute_flashlight_value();
+
+        // CC V3: Relax marathon decay — applied to aim and flashlight on RX.
+        if self.mods.rx() {
+            let params = crate::osu::marathon::MarathonDecayParams::default();
+            let mult = crate::osu::marathon::relax_marathon_multiplier(
+                &self.attrs.local_sr_per_minute,
+                &params,
+            );
+            flashlight_value *= mult;
+            // aim_value already has the RX evaluator applied at the strain level;
+            // marathon decay stacks on top for length punishment.
+            // Note: aim_value is immutable here so we apply it in the final combine.
+        }
+
+        // CC V3: miss-only combo scaling replaces vanilla combo scaling on aim+speed.
+        // Vanilla's get_combo_scaling_factor() is ONLY kept for flashlight.
+        // The miss multiplier applies the consistency model: p^(misses^exp).
+        let cc_miss_mult = self.cc_v3_miss_multiplier();
 
         let pp = (aim_value.powf(1.1)
             + speed_value.powf(1.1)
             + acc_value.powf(1.1)
             + flashlight_value.powf(1.1))
         .powf(1.0 / 1.1)
-            * multiplier;
+            * multiplier
+            * cc_miss_mult;
 
         OsuPerformanceAttributes {
             difficulty: self.attrs,
@@ -524,7 +542,8 @@ impl OsuPpInner {
                     .powf(self.effective_miss_count);
         }
 
-        aim_value *= self.get_combo_scaling_factor();
+        // CC V3: combo scaling removed from aim — handled by cc_v3_miss_multiplier
+        // on the final pp instead. Only flashlight retains combo scaling.
 
         let ar_factor = if self.mods.rx() {
             0.0
@@ -591,7 +610,7 @@ impl OsuPpInner {
                     .powf(self.effective_miss_count.powf(0.875));
         }
 
-        speed_value *= self.get_combo_scaling_factor();
+        // CC V3: combo scaling removed from speed — handled by cc_v3_miss_multiplier.
 
         let ar_factor = if self.attrs.ar > 10.33 {
             0.3 * (self.attrs.ar - 10.33)
@@ -720,6 +739,48 @@ impl OsuPpInner {
             ((self.state.max_combo as f64).powf(0.8) / (self.attrs.max_combo as f64).powf(0.8))
                 .min(1.0)
         }
+    }
+
+    /// CC V3 miss-only combo scaling. Replaces vanilla's combo-position-based
+    /// scaling with a miss-count exponential: p^(misses^exp).
+    fn cc_v3_miss_multiplier(&self) -> f64 {
+        let misses = self.effective_miss_count;
+        if misses <= 0.0 {
+            return 1.0;
+        }
+
+        let mut p: f64 = 0.998;
+
+        // Mod-specific p adjustments
+        if self.mods.rx() { p -= 0.02; }
+        if self.mods.dt() && self.mods.hr() { p += 0.0025; }
+        if self.mods.dt() && self.mods.ez() { p += 0.0028; }
+
+        // Short map farm nerf
+        if self.attrs.max_combo <= 500 && self.mods.dt() { p -= 0.02; }
+        if self.attrs.max_combo <= 500 && self.mods.dt() && self.mods.hr() { p -= 0.01; }
+        if self.attrs.max_combo <= 500 && self.mods.rx() { p -= 0.03; }
+
+        // Stepped miss exponent
+        let miss_exp = if misses >= 14.0 { 2.4 }
+            else if misses >= 6.0 { 2.3 }
+            else if misses >= 4.0 { 2.1 }
+            else if misses >= 2.0 { 1.7 }
+            else { 1.5 };
+
+        // Gentler variant for 2000+ combo marathons
+        let mara_miss_exp = if misses >= 16.0 { 2.3 }
+            else if misses >= 6.0 { 2.1 }
+            else if misses >= 4.0 { 1.9 }
+            else { 1.5 };
+
+        let miss_weight = if self.attrs.max_combo >= 2000 {
+            misses.powf(mara_miss_exp)
+        } else {
+            misses.powf(miss_exp)
+        };
+
+        p.powf(miss_weight)
     }
 
     fn total_hits(&self) -> f64 {

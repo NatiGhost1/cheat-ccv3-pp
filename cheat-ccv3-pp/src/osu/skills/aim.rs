@@ -11,19 +11,21 @@ pub(crate) struct Aim {
     curr_section_end: f64,
     pub(crate) strain_peaks: CompactVec,
     with_sliders: bool,
+    has_relax: bool,
 }
 
 impl Aim {
     const SKILL_MULTIPLIER: f64 = 23.55;
     const STRAIN_DECAY_BASE: f64 = 0.15;
 
-    pub(crate) fn new(with_sliders: bool) -> Self {
+    pub(crate) fn new(with_sliders: bool, has_relax: bool) -> Self {
         Self {
             curr_strain: 0.0,
             curr_section_peak: 0.0,
             curr_section_end: 0.0,
             strain_peaks: CompactVec::new(),
             with_sliders,
+            has_relax,
         }
     }
 
@@ -71,8 +73,14 @@ impl StrainSkill for Aim {
         diff_objects: &[OsuDifficultyObject<'_>],
     ) -> f64 {
         self.curr_strain *= Self::strain_decay(curr.delta_time);
-        self.curr_strain += AimEvaluator::evaluate_diff_of(curr, diff_objects, self.with_sliders)
-            * Self::SKILL_MULTIPLIER;
+
+        let eval_result = if self.has_relax {
+            super::aim_rx::AimRxEvaluator::evaluate_diff_of(curr, diff_objects, self.with_sliders)
+        } else {
+            AimEvaluator::evaluate_diff_of(curr, diff_objects, self.with_sliders)
+        };
+
+        self.curr_strain += eval_result * Self::SKILL_MULTIPLIER;
 
         self.curr_strain
     }
@@ -98,9 +106,9 @@ impl OsuStrainSkill for Aim {}
 struct AimEvaluator;
 
 impl AimEvaluator {
-    const WIDE_ANGLE_MULTIPLIER: f64 = 1.50;
-    const ACUTE_ANGLE_MULTIPLIER: f64 = 1.90;
-    const SLIDER_MULTIPLIER: f64 = 1.35;
+    const WIDE_ANGLE_MULTIPLIER: f64 = 1.35;
+    const ACUTE_ANGLE_MULTIPLIER: f64 = 2.0;
+    const SLIDER_MULTIPLIER: f64 = 1.32;
     const VELOCITY_CHANGE_MULTIPLIER: f64 = 0.7;
 
     fn evaluate_diff_of(

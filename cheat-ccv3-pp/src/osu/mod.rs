@@ -4,6 +4,7 @@ mod pp;
 mod scaling_factor;
 mod score_state;
 mod skills;
+pub(crate) mod marathon;
 
 #[cfg(feature = "gradual")]
 mod gradual_difficulty;
@@ -134,6 +135,11 @@ impl<'map> OsuStars<'map> {
             mut flashlight,
         } = skills;
 
+        // CC V3: Clone strain peaks before difficulty_value() consumes them.
+        // Used by the Relax marathon decay.
+        let aim_peaks: Vec<f64> = aim.strain_peaks.to_vec();
+        let speed_peaks: Vec<f64> = speed.strain_peaks.to_vec();
+
         let mut aim_rating = aim.difficulty_value().sqrt() * DIFFICULTY_MULTIPLIER;
         let aim_rating_no_sliders =
             aim_no_sliders.difficulty_value().sqrt() * DIFFICULTY_MULTIPLIER;
@@ -189,6 +195,9 @@ impl<'map> OsuStars<'map> {
         attrs.slider_factor = slider_factor;
         attrs.stars = star_rating;
         attrs.speed_note_count = speed_notes;
+
+        // CC V3: Compute per-minute local SR for Relax marathon decay.
+        attrs.local_sr_per_minute = marathon::local_sr_per_minute(&aim_peaks, &speed_peaks);
 
         attrs
     }
@@ -581,6 +590,8 @@ pub struct OsuDifficultyAttributes {
     pub stars: f64,
     /// The maximum combo.
     pub max_combo: usize,
+    /// CC V3: Per-minute local SR for Relax marathon decay.
+    pub local_sr_per_minute: Vec<f64>,
 }
 
 impl OsuDifficultyAttributes {
