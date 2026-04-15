@@ -481,18 +481,19 @@ impl OsuPpInner {
                 .min(total_hits);
         }
 
-        let aim_value = self.compute_aim_value();
+        let mut aim_value = self.compute_aim_value();
         let speed_value = self.compute_speed_value();
         let acc_value = self.compute_accuracy_value();
         let mut flashlight_value = self.compute_flashlight_value();
 
-        // CC V3: Relax marathon decay — applied to flashlight on RX.
+        // CC V3: Relax marathon decay — applied to aim and flashlight on RX.
         if self.mods.rx() {
             let params = crate::osu::marathon::MarathonDecayParams::default();
             let mult = crate::osu::marathon::relax_marathon_multiplier(
                 &self.attrs.local_sr_per_minute,
                 &params,
             );
+            aim_value *= mult;
             flashlight_value *= mult;
         }
 
