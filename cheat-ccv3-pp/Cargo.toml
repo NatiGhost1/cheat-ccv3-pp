@@ -1,13 +1,13 @@
 [package]
-name = "rosu-pp"
-version = "0.10.0"
-authors = ["MaxOhn <ohn.m@hotmail.de>"]
-edition = "2021"
+name = "cheat-ccv3-pp"
+version = "0.0.1"
+authors = ["MaxOhn <ohn.m@hotmail.de>", "NatiGhost1 <josh.miller83@outlook.com>"]
+edition = "2026"
 license = "MIT"
 readme = "README.md"
-repository = "https://github.com/MaxOhn/rosu-pp"
+repository = "https://github.com/NatiGhost1/rosu-pp-0.10.0-remake"
 documentation = "https://docs.rs/rosu-pp/"
-description = "osu! difficulty and pp calculation for all modes"
+description = "combo consistency for cheat servers"
 keywords = ["osu", "pp", "stars", "async"]
 
 [features]
