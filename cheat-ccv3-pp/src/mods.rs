@@ -19,6 +19,7 @@ pub trait Mods: Copy {
     const RX: u32 = 1 << 7;
     const HT: u32 = 1 << 8;
     const FL: u32 = 1 << 10;
+    const AP: u32 = 1 << 11;
     const SO: u32 = 1 << 12;
 
     /// If the clock rate is affected by the mods.
@@ -38,6 +39,7 @@ pub trait Mods: Copy {
     fn rx(self) -> bool;
     fn ht(self) -> bool;
     fn fl(self) -> bool;
+    fn ap(self) -> bool;
     fn so(self) -> bool;
 }
 
@@ -83,5 +85,6 @@ impl Mods for u32 {
     impl_mods!(rx, RX);
     impl_mods!(ht, HT);
     impl_mods!(fl, FL);
+    impl_mods!(ap, AP);
     impl_mods!(so, SO);
 }

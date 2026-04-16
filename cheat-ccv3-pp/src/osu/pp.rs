@@ -518,10 +518,13 @@ impl OsuPpInner {
         let miss_combo_mult = if miss_count <= 0.0 {
             1.0
         } else if self.mods.rx() {
-            // RX: skip strain-aware system, use plain vanilla combo scaling 
-            // temporary until we have a better solution for RX misses in CC V3 
-            // — ideally we'd want to also consider miss position for RX, 
-            // but that requires more extensive changes to the state and calculator
+            // RX: use fallback accuracy drop based weighting for more reliable miss estimation
+            let combo_ratio =
+                (self.state.max_combo as f64 / self.attrs.max_combo as f64).clamp(0.0, 1.0);
+            let acc_drop_weight = self.accuracy_drop_based_miss_weight(combo_ratio);
+            acc_drop_weight
+        } else if self.mods.ap() {
+            // AP: use vanilla combo scaling (original OG method)
             if self.attrs.max_combo > 0 {
                 ((self.state.max_combo as f64).powf(0.8)
                     / (self.attrs.max_combo as f64).powf(0.8))
