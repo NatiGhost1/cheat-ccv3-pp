@@ -3,7 +3,7 @@ mod osu_object;
 mod pp;
 mod scaling_factor;
 mod score_state;
-mod section_strains;
+mod strains;
 mod skills;
 pub(crate) mod marathon;
 
@@ -199,6 +199,9 @@ impl<'map> OsuStars<'map> {
 
         // CC V3: Compute per-minute local SR for Relax marathon decay.
         attrs.local_sr_per_minute = marathon::local_sr_per_minute(&aim_peaks, &speed_peaks);
+
+        // CC V3: Compute per-15-second local SR for more granular miss weighting.
+        attrs.local_sr_per_15s = section_strains::local_sr_per_15s(&aim_peaks, &speed_peaks);
 
         attrs
     }
@@ -593,6 +596,8 @@ pub struct OsuDifficultyAttributes {
     pub max_combo: usize,
     /// CC V3: Per-minute local SR for Relax marathon decay.
     pub local_sr_per_minute: Vec<f64>,
+    /// CC V3: Per-15-second local SR for granular miss weighting.
+    pub local_sr_per_15s: Vec<f64>,
 }
 
 impl OsuDifficultyAttributes {

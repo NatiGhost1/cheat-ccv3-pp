@@ -872,13 +872,14 @@ impl OsuPpInner {
 
         // Strain context: sample local SR at the miss position, compare to peak.
         // When strain data is unavailable, fall back to accuracy-drop-based weighting.
-        let strain_relative = if !self.attrs.local_sr_per_minute.is_empty() {
-            let n = self.attrs.local_sr_per_minute.len();
+        // Uses 15-SECOND peaks for more granular difficulty analysis.
+        let strain_relative = if !self.attrs.local_sr_per_15s.is_empty() {
+            let n = self.attrs.local_sr_per_15s.len();
             let idx = ((combo_ratio * n as f64) as usize).min(n - 1);
-            let sample = self.attrs.local_sr_per_minute[idx];
+            let sample = self.attrs.local_sr_per_15s[idx];
             let peak = self
                 .attrs
-                .local_sr_per_minute
+                .local_sr_per_15s
                 .iter()
                 .copied()
                 .fold(0.0_f64, f64::max);
