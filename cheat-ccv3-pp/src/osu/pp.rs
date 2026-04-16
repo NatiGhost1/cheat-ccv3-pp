@@ -765,6 +765,25 @@ impl OsuPpInner {
         // * It is important to also consider accuracy difficulty when doing that.
         flashlight_value *= 0.98 + self.attrs.od * self.attrs.od / 2500.0;
 
+        // CC V3: Circle size based nerf with exponential decay
+        // CS <= 3.0: exponential decay from 0.78 (at CS 3.0) to 0.68 (at CS 0, cap)
+        // CS >= 5.8: exponential growth from 0.8 (at CS 5.8) to 0.9 (at CS 10, cap)
+        let cs = (self.map.cs as f64).clamp(0.0, 10.0);
+        let cs_nerf = if cs <= 3.0 {
+            // Exponential decay from 0.78 at CS 3.0 to 0.68 at CS 0
+            let normalized = (3.0 - cs) / 3.0; // 0 at CS 3.0, 1 at CS 0
+            0.78 - 0.1 * (1.0 - (-2.0 * normalized).exp())
+        } else if cs >= 5.8 {
+            // Exponential growth from 0.8 at CS 5.8 to 0.9 at CS 10
+            let normalized = (cs - 5.8) / (10.0 - 5.8); // 0 at CS 5.8, 1 at CS 10
+            0.8 + 0.1 * (1.0 - (-2.0 * normalized).exp())
+        } else {
+            // CS between 3.0 and 5.8: no nerf
+            1.0
+        };
+
+        flashlight_value *= cs_nerf;
+
         flashlight_value
     }
 
