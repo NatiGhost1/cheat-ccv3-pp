@@ -1,6 +1,6 @@
 [package]
 name = "cheat-ccv3-pp"
-version = "0.0.1"
+version = "0.1.0"
 authors = ["MaxOhn <ohn.m@hotmail.de>", "NatiGhost1 <josh.miller83@outlook.com>"]
 edition = "2026"
 license = "MIT"
