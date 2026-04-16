@@ -2,7 +2,7 @@ mod catch_object;
 mod difficulty_object;
 mod fruit_or_juice;
 mod movement;
-mod pp;
+mod performance;
 mod score_state;
 
 #[cfg(feature = "gradual")]
@@ -13,7 +13,7 @@ mod gradual_performance;
 use difficulty_object::DifficultyObject;
 use movement::Movement;
 
-pub use self::{catch_object::CatchObject, pp::*, score_state::CatchScoreState};
+pub use self::{catch_object::CatchObject, performance::*, score_state::CatchScoreState};
 
 #[cfg(feature = "gradual")]
 pub use self::{
