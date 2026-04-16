@@ -777,6 +777,48 @@ impl OsuPpInner {
         }
     }
 
+    /// Estimate miss weight based on accuracy drop patterns (fallback when strain data unavailable).
+    ///
+    /// With aggregate hit data, estimates if the miss likely occurred in a hard section
+    /// by analyzing the overall accuracy pattern. Maps with high acc drop ratios indicate
+    /// that sections are generally harder to hit, so a miss is more likely in a difficult area.
+    fn accuracy_drop_based_miss_weight(&self, _combo_ratio: f64) -> f64 {
+        let total_hits = self.total_hits();
+        if total_hits == 0 {
+            return 0.5;
+        }
+
+        // Weights: n_300 = 1.0, n_100 = 0.9, n_50 = 0.85
+        let total_100 = self.state.n100 as f64;
+        let total_50 = self.state.n50 as f64;
+        let total_300 = self.state.n300 as f64;
+
+        // Compute weighted accuracy sum and drop
+        let actual_weighted_sum = total_300 * 1.0 + total_100 * 0.9 + total_50 * 0.85;
+        let max_possible_sum = total_hits as f64 * 1.0; // all 300s = 1.0 per note
+        let actual_acc_drop = max_possible_sum - actual_weighted_sum;
+
+        // Compute average hits per note
+        let avg_weight_per_note = actual_weighted_sum / total_hits as f64;
+
+        // If average weight is notably low (many 100s/50s), map sections are harder
+        // threshold of 0.95 = very few misses/inaccuracies, map is easy
+        // threshold of 0.85 = many misses/inaccuracies, map is hard
+        let hardness_ratio = avg_weight_per_note.min(1.0);
+
+        // If hardness indicates a hard map (closer to 0.8), apply higher decay
+        // Smooth scaling: 1.0 weight → 0.50 multiplier, 0.8 weight → 0.75 multiplier
+        let is_hard_map = hardness_ratio < 0.90;
+
+        if is_hard_map {
+            // Hard map indicates miss likely occurred in difficult section, apply 25% decay
+            0.75
+        } else {
+            // Easy map, miss likely in easier context
+            0.50
+        }
+    }
+
     /// CC V3 strain-aware symmetric miss weighting (non-RX, 1+ misses).
     ///
     /// Two multiplicative factors:
@@ -810,6 +852,7 @@ impl OsuPpInner {
         let midpoint_prox = 1.0 - ((combo_ratio - 0.5).abs() / 0.5).min(1.0);
 
         // Strain context: sample local SR at the miss position, compare to peak.
+        // When strain data is unavailable, fall back to accuracy-drop-based weighting.
         let strain_relative = if !self.attrs.local_sr_per_minute.is_empty() {
             let n = self.attrs.local_sr_per_minute.len();
             let idx = ((combo_ratio * n as f64) as usize).min(n - 1);
@@ -823,10 +866,16 @@ impl OsuPpInner {
             if peak > 0.0 {
                 (sample / peak).clamp(0.0, 1.0)
             } else {
-                0.5 // neutral fallback when strain data is degenerate
+                // Fallback: use accuracy drop pattern when strain data is degenerate
+                let acc_drop_weight = self.accuracy_drop_based_miss_weight(combo_ratio);
+                // Convert weight to strain_relative: 0.75 → 1.0 (hardest), 0.50 → 0.0 (easiest)
+                ((1.0 - acc_drop_weight) / 0.25).clamp(0.0, 1.0)
             }
         } else {
-            0.5 // neutral fallback when attrs has no local SR
+            // Fallback: use accuracy drop pattern when no strain data available
+            let acc_drop_weight = self.accuracy_drop_based_miss_weight(combo_ratio);
+            // Convert weight to strain_relative: 0.75 → 1.0 (hardest), 0.50 → 0.0 (easiest)
+            ((1.0 - acc_drop_weight) / 0.25).clamp(0.0, 1.0)
         };
 
         // Max loss at midpoint: 40% easy → 25% peak
