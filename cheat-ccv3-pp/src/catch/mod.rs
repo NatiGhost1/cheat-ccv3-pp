@@ -2,7 +2,7 @@ mod catch_object;
 mod difficulty_object;
 mod fruit_or_juice;
 mod movement;
-mod performance;
+mod pp;
 mod score_state;
 
 #[cfg(feature = "gradual")]
