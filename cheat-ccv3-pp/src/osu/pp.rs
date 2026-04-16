@@ -929,7 +929,14 @@ fn calculate_effective_misses(attrs: &OsuDifficultyAttributes, state: &OsuScoreS
     combo_based_miss_count =
         combo_based_miss_count.min((state.n100 + state.n50 + state.n_misses) as f64);
 
-    combo_based_miss_count.max(state.n_misses as f64)
+    let mut effective_misses = combo_based_miss_count.max(state.n_misses as f64);
+
+    // CC V3: For OD 0, treat each n_50 as 1 effective miss
+    if (attrs.od - 0.0).abs() < 0.01 {
+        effective_misses += state.n50 as f64;
+    }
+
+    effective_misses
 }
 
 fn accuracy(n300: usize, n100: usize, n50: usize, n_misses: usize) -> f64 {
