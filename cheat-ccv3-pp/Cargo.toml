@@ -2,7 +2,7 @@
 name = "cheat-ccv3-pp"
 version = "0.30.0"
 authors = ["MaxOhn <ohn.m@hotmail.de>", "NatiGhost1 <josh.miller83@outlook.com>"]
-edition = "2026"
+edition = "2021"
 license = "MIT"
 readme = "README.md"
 repository = "https://github.com/NatiGhost1/cheat-ccv3-pp"
