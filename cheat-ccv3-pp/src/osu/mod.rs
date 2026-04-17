@@ -156,13 +156,25 @@ impl<'map> OsuStars<'map> {
             1.0
         };
 
+        let is_4mod = mods.dt() && mods.hd() && !mods.hr() && !mods.fl();
+
         if mods.td() {
             aim_rating = aim_rating.powf(0.8);
             flashlight_rating = flashlight_rating.powf(0.8);
         }
 
+        if mods.td() && is_4mod {
+            aim_rating = aim_rating.powf(1.0);
+            flashlight_rating = flashlight_rating.powf(1.0);
+        }
+
+        if mods.td() && is_4mod && mods.rx() {
+            aim_rating = 1.0;
+            flashlight_rating *= 0.7;
+        }
+
         if mods.rx() {
-            aim_rating *= 0.9;
+            aim_rating *= 1.0;
             speed_rating = 0.0;
             flashlight_rating *= 0.7;
         }
