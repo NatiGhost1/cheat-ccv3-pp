@@ -894,12 +894,7 @@ impl OsuPpInner {
                 // Convert weight to strain_relative: 0.75 → 1.0 (hardest), 0.50 → 0.0 (easiest)
                 ((1.0 - acc_drop_weight) / 0.25).clamp(0.0, 1.0)
             }
-        } else {
-            // Fallback: use accuracy drop pattern when no strain data available
-            let acc_drop_weight = self.accuracy_drop_based_miss_weight(combo_ratio);
-            // Convert weight to strain_relative: 0.75 → 1.0 (hardest), 0.50 → 0.0 (easiest)
-            ((1.0 - acc_drop_weight) / 0.25).clamp(0.0, 1.0)
-        };
+        }
 
         // Max loss at midpoint: 40% easy → 25% peak
         let max_loss_at_midpoint = 0.40 - 0.15 * strain_relative;
