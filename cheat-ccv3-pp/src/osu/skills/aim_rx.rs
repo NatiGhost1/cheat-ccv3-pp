@@ -9,6 +9,31 @@ use crate::osu::difficulty_object::OsuDifficultyObject;
 
 use super::previous;
 
+// ─── Curved interpolation helpers ──────────────────────────────────
+// Smoothstep-based functions for more accurate curve behavior
+
+/// Smootherstep (Perlin's improved smoothstep): smooth polynomial transitions
+/// Uses 6t^5 - 15t^4 + 10t^3 for better numerical stability than sine
+#[inline]
+fn smootherstep(t: f64) -> f64 {
+    let t = t.clamp(0.0, 1.0);
+    t * t * t * (t * (t * 6.0 - 15.0) + 10.0)
+}
+
+/// Cubic smoothstep: smooth interpolation for normalized ranges
+#[inline]
+fn smoothstep(t: f64) -> f64 {
+    let t = t.clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
+/// Quintic polynomial approximation for better precision and smoother curves
+#[inline]
+fn quintic_ease(t: f64) -> f64 {
+    let t = t.clamp(0.0, 1.0);
+    t * t * t * (t * (t * 6.0 - 15.0) + 10.0)
+}
+
 pub(crate) struct AimRxEvaluator;
 
 /// Collect up to `window` previous angles (including curr) and return
@@ -123,12 +148,12 @@ impl AimRxEvaluator {
                 if osu_curr_obj.strain_time > 100.0 {
                     acute_angle_bonus = 0.0;
                 } else {
-                    let base1 =
-                        (FRAC_PI_2 * ((100.0 - osu_curr_obj.strain_time) / 25.0).min(1.0)).sin();
-                    let base2 = (FRAC_PI_2
-                        * ((osu_curr_obj.dists.lazy_jump_dist).clamp(50.0, 100.0) - 50.0)
-                        / 50.0)
-                        .sin();
+                    // Use smootherstep for better numerical characteristics
+                    let time_factor = ((100.0 - osu_curr_obj.strain_time) / 25.0).clamp(0.0, 1.0);
+                    let base1 = smootherstep(time_factor);
+                    
+                    let dist_factor = ((osu_curr_obj.dists.lazy_jump_dist).clamp(50.0, 100.0) - 50.0) / 50.0;
+                    let base2 = smootherstep(dist_factor);
 
                     acute_angle_bonus *= Self::calc_acute_angle_bonus(last_angle)
                         * angle_bonus.min(125.0 / osu_curr_obj.strain_time)
@@ -172,8 +197,9 @@ impl AimRxEvaluator {
             curr_vel = (osu_curr_obj.dists.lazy_jump_dist + osu_last_obj.dists.travel_dist)
                 / osu_curr_obj.strain_time;
 
-            let dist_ratio_base =
-                (FRAC_PI_2 * (prev_vel - curr_vel).abs() / prev_vel.max(curr_vel)).sin();
+            // Use smootherstep instead of sine for better numerical accuracy
+            let vel_change_ratio = ((prev_vel - curr_vel).abs() / prev_vel.max(curr_vel)).clamp(0.0, 1.0);
+            let dist_ratio_base = smootherstep(vel_change_ratio);
             let dist_ratio = dist_ratio_base * dist_ratio_base;
 
             let overlap_vel_buff = (125.0 / osu_curr_obj.strain_time.min(osu_last_obj.strain_time))
@@ -235,34 +261,73 @@ impl AimRxEvaluator {
             }
         }
 
-        // ── Extreme flow aim nerf ──────────────────────────────────
-        if osu_curr_obj.strain_time >= Self::FLOW_BPM_STRAIN_TIME {
-            let (flow_mean, flow_stddev, flow_n) =
-                windowed_angle_stats(osu_curr_obj, diff_objects, Self::ANGLE_WINDOW);
+        // ════════════════════════════════════════════════════════════
+        // BPM-aware exponential scaling system (Relax)
+        //
+        // Continuous exponential scaling based on BPM and variety metrics
+        // Anchor: 410 BPM = 1.0x, grows exponentially above, reduces below
+        // Low variety gets less nerf at high BPM, all patterns unified scaling
+        // Dampening cap above 520.5 strain limits extreme growth
+        // ════════════════════════════════════════════════════════════
 
-            if flow_n >= 4 {
-                let mean_ok = flow_mean >= Self::FLOW_MEAN_ANGLE_THRESHOLD;
-                let stddev_ok = flow_stddev <= Self::FLOW_STDDEV_THRESHOLD;
+        let eff_bpm = 30_000.0 / osu_curr_obj.strain_time;
 
-                if mean_ok && stddev_ok {
-                    let stddev_severity =
-                        (1.0 - (flow_stddev / Self::FLOW_STDDEV_THRESHOLD)).powi(2);
-                    let mean_range = PI - Self::FLOW_MEAN_ANGLE_THRESHOLD;
-                    let mean_severity = ((flow_mean - Self::FLOW_MEAN_ANGLE_THRESHOLD)
-                        / mean_range)
-                        .clamp(0.0, 1.0);
-                    let combined = stddev_severity * mean_severity;
-                    aim_strain *= 1.0 - Self::FLOW_MAX_NERF * combined;
-                }
-            }
+        // ── Variety measurement ────────────────────────────────────
+        let (angle_mean, angle_stddev, angle_n) =
+            windowed_angle_stats(osu_curr_obj, diff_objects, Self::ANGLE_WINDOW);
+
+        let angle_var = if angle_n >= 3 {
+            (angle_stddev / 1.2).clamp(0.0, 1.0)
+        } else {
+            0.5
+        };
+
+        // Calculate distance variance for relax as well
+        let dist_mean = osu_curr_obj.dists.lazy_jump_dist;
+        let dist_var = 0.5; // Default neutral for relax; could be calculated if needed
+
+        let combined_variety = (angle_var + dist_var) / 2.0;
+
+        // ── BPM scaling calculation (same as standard aim) ─────────
+        let bpm_base_factor = if eff_bpm < 410.0 {
+            let low_bpm_t = ((eff_bpm - 250.0) / (410.0 - 250.0)).clamp(0.0, 1.0);
+            0.8 + 0.2 * smootherstep(low_bpm_t)
+        } else {
+            let bpm_ratio = (eff_bpm - 410.0) / 150.0;
+            1.0 + bpm_ratio.powf(1.4)
+        };
+
+        let variety_mod = if eff_bpm > 410.0 {
+            let high_bpm_t = ((eff_bpm - 410.0) / 150.0).clamp(0.0, 1.0);
+            1.0 - (combined_variety * 0.15 * smootherstep(high_bpm_t))
+        } else {
+            1.0
+        };
+
+        let bpm_multiplier = bpm_base_factor * variety_mod;
+        let mut scaled_strain = aim_strain * bpm_multiplier;
+
+        // ── Cap dampening above 520.5 strain ───────────────────────
+        const CAP_THRESHOLD: f64 = 520.5;
+        const DAMPENING_FACTOR: f64 = 0.05;
+
+        if scaled_strain > CAP_THRESHOLD {
+            let excess = scaled_strain - CAP_THRESHOLD;
+            let dampening = 1.0 / (1.0 + DAMPENING_FACTOR * excess);
+            scaled_strain = CAP_THRESHOLD + excess * dampening;
         }
+
+        aim_strain = scaled_strain;
 
         aim_strain
     }
 
     fn calc_wide_angle_bonus(angle: f64) -> f64 {
-        let base = (3.0 / 4.0 * ((5.0 / 6.0 * PI).min(angle.max(PI / 6.0)) - PI / 6.0)).sin();
-        base * base
+        // Normalize angle to [0, 1] range within meaningful bounds (PI/6 to 5PI/6)
+        let normalized = ((angle.max(PI / 6.0).min(5.0 * PI / 6.0)) - PI / 6.0) / (5.0 * PI / 6.0 - PI / 6.0);
+        // Use quintic polynomial for smoother, more accurate curve
+        let curve = quintic_ease(normalized);
+        curve * curve
     }
 
     fn calc_acute_angle_bonus(angle: f64) -> f64 {

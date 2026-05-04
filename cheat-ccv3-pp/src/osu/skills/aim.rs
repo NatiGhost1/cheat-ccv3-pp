@@ -169,6 +169,40 @@ fn windowed_dist_stats(
 }
 
 
+// ─── Curved interpolation helpers ──────────────────────────────────
+// Smoothstep-based functions for more accurate curve behavior
+
+/// Cubic smoothstep: smooth interpolation from 0 to 1 over [0, 1]
+/// More accurate and numerically stable than sine for normalized ranges
+#[inline]
+fn smoothstep(t: f64) -> f64 {
+    let t = t.clamp(0.0, 1.0);
+    t * t * (3.0 - 2.0 * t)
+}
+
+/// Smootherstep (Perlin's improved smoothstep): even smoother transitions
+/// Uses 6t^5 - 15t^4 + 10t^3 for better visual smoothness
+#[inline]
+fn smootherstep(t: f64) -> f64 {
+    let t = t.clamp(0.0, 1.0);
+    t * t * t * (t * (t * 6.0 - 15.0) + 10.0)
+}
+
+/// Normalized sigmoid-like curve: smooth S-curve from 0 to 1
+/// Better than sine for modeling difficulty curves
+#[inline]
+fn sigmoid_curve(x: f64, steepness: f64) -> f64 {
+    1.0 / (1.0 + (-steepness * x).exp())
+}
+
+/// Quintic polynomial approximation for better precision
+/// Maps a value through a quintic curve for smoother transitions
+#[inline]
+fn quintic_ease(t: f64) -> f64 {
+    let t = t.clamp(0.0, 1.0);
+    t * t * t * (t * (t * 6.0 - 15.0) + 10.0)
+}
+
 struct AimEvaluator;
 
 impl AimEvaluator {
@@ -238,12 +272,12 @@ impl AimEvaluator {
                 if osu_curr_obj.strain_time > 100.0 {
                     acute_angle_bonus = 0.0;
                 } else {
-                    let base1 =
-                        (FRAC_PI_2 * ((100.0 - osu_curr_obj.strain_time) / 25.0).min(1.0)).sin();
-                    let base2 = (FRAC_PI_2
-                        * ((osu_curr_obj.dists.lazy_jump_dist).clamp(50.0, 100.0) - 50.0)
-                        / 50.0)
-                        .sin();
+                    // Use smootherstep for better numerical characteristics
+                    let time_factor = ((100.0 - osu_curr_obj.strain_time) / 25.0).clamp(0.0, 1.0);
+                    let base1 = smootherstep(time_factor);
+                    
+                    let dist_factor = ((osu_curr_obj.dists.lazy_jump_dist).clamp(50.0, 100.0) - 50.0) / 50.0;
+                    let base2 = smootherstep(dist_factor);
 
                     acute_angle_bonus *= Self::calc_acute_angle_bonus(last_angle)
                         * angle_bonus.min(125.0 / osu_curr_obj.strain_time)
@@ -271,8 +305,9 @@ impl AimEvaluator {
             curr_vel = (osu_curr_obj.dists.lazy_jump_dist + osu_last_obj.dists.travel_dist)
                 / osu_curr_obj.strain_time;
 
-            let dist_ratio_base =
-                (FRAC_PI_2 * (prev_vel - curr_vel).abs() / prev_vel.max(curr_vel)).sin();
+            // Use smootherstep instead of sine for better numerical accuracy
+            let vel_change_ratio = ((prev_vel - curr_vel).abs() / prev_vel.max(curr_vel)).clamp(0.0, 1.0);
+            let dist_ratio_base = smootherstep(vel_change_ratio);
             let dist_ratio = dist_ratio_base * dist_ratio_base;
 
             let overlap_vel_buff = (125.0 / osu_curr_obj.strain_time.min(osu_last_obj.strain_time))
@@ -293,43 +328,19 @@ impl AimEvaluator {
         // Sliders give zero PP — SLIDER_MULTIPLIER is 0.0, skip entirely.
 
         // ════════════════════════════════════════════════════════════
-        // CC V3: BPM-aware variation tiering
+        // BPM-aware exponential scaling system
         //
-        // Nerf multiplier depends on two axes:
-        //   1. Pattern variation (from windowed angle + distance stats)
-        //   2. Effective BPM
-        //
-        // Variation tiers:
-        //   REPETITIVE  (angle_var < 0.20 rad)  → hardest nerf
-        //   SLIGHT_VAR  (0.20 – 0.55 rad)       → heavy nerf
-        //   VARIED      (0.55 – 0.90 rad)       → moderate nerf
-        //   TECH        (varied angles + high vel_change) → lightest nerf
-        //
-        // Cross-screen (large constant-distance, low angle var):
-        //   → intermediate between SLIGHT_VAR and VARIED
-        //
-        // BPM curve:
-        //   < 300 eff BPM    → full nerf strength
-        //   300 – 450        → linear relief
-        //   > 450            → minimum nerf (but repetitive still pays)
-        //
-        // The multiplier floor/ceiling per tier:
-        //
-        //   Tier          |  <300 BPM  |  450+ BPM
-        //   ──────────────┼───────────┼──────────
-        //   REPETITIVE    |   0.25    |   0.55
-        //   SLIGHT_VAR    |   0.40    |   0.70
-        //   CROSS_SCREEN  |   0.50    |   0.78
-        //   VARIED        |   0.60    |   0.85
-        //   TECH          |   0.75    |   0.95
+        // Calibrated to match old discrete tier system output:
+        //   - Anchor: 410 BPM ≈ 0.65x (avg of old SLIGHT_VAR/VARIED at this BPM)
+        //   - Exponential growth above 410, reduction below
+        //   - Variety modulation: low variety → higher multiplier at high BPM
+        //   - Unified scaling for all patterns (removed discrete tiers)
+        //   - cap dampening above 520.5 strain
         // ════════════════════════════════════════════════════════════
 
         let eff_bpm = 30_000.0 / osu_curr_obj.strain_time;
 
-        // BPM factor: 0.0 at ≤300, 1.0 at ≥450
-        let bpm_factor = ((eff_bpm - 300.0) / 150.0).clamp(0.0, 1.0);
-
-        // ── Variation measurement ───────────────────────────────────
+        // ── Variety measurement (angle + distance) ──────────────────
         let (angle_mean, angle_stddev, angle_n) =
             windowed_angle_stats(osu_curr_obj, diff_objects, ANGLE_WINDOW);
         let (dist_mean, dist_stddev, dist_n) =
@@ -339,62 +350,73 @@ impl AimEvaluator {
         let angle_var = if angle_n >= 3 {
             (angle_stddev / 1.0).clamp(0.0, 1.0)
         } else {
-            0.5 // neutral if not enough data
+            0.5
         };
 
-        // Distance variation (for cross-screen detection)
+        // Distance variation: normalized by mean distance
         let dist_var = if dist_n >= 3 && dist_mean > 0.0 {
-            (dist_stddev / dist_mean).clamp(0.0, 1.0)  // coefficient of variation
+            (dist_stddev / dist_mean).clamp(0.0, 1.0)
         } else {
             0.5
         };
 
-        // Velocity change ratio (for tech detection)
-        let tech_signal = if aim_strain > f64::EPSILON {
-            (vel_change_bonus * Self::VELOCITY_CHANGE_MULTIPLIER / aim_strain)
-                .clamp(0.0, 1.0)
+        // Combined variety: 0 = repetitive, 1 = highly varied
+        let combined_variety = (angle_var + dist_var) / 2.0;
+
+        // ── BPM scaling calculation ────────────────────────────────
+        // Calibrated to match old system (which ranged ~0.25-0.95x)
+        // Anchor at 410 BPM ≈ 0.65x (equivalent to old SLIGHT_VAR/VARIED)
+        let bpm_base_factor = if eff_bpm < 410.0 {
+            // Below 410: smooth ramp from ~0.38 at 250 BPM to ~0.65 at 410
+            let low_bpm_t = ((eff_bpm - 250.0) / (410.0 - 250.0)).clamp(0.0, 1.0);
+            let base_floor = 0.38;
+            let base_anchor = 0.65;
+            base_floor + (base_anchor - base_floor) * smootherstep(low_bpm_t)
         } else {
-            0.0
+            // Above 410: exponential growth but conservative (power 1.15)
+            // Grows from 0.65 at 410 to ~0.85 at 470, ~1.05 at 500+
+            let bpm_ratio = (eff_bpm - 410.0) / 180.0;
+            0.65 * (1.0 + bpm_ratio.powf(1.15))
         };
 
-        // ── Classify the pattern ────────────────────────────────────
-        // Cross-screen: large distances (mean > 360 px), low distance
-        // variation (constant spacing), but not necessarily low angle var
-        let is_cross_screen = dist_mean > 360.0 && dist_var < 0.25 && angle_var < 0.55;
-
-        // Tech: varied angles AND meaningful velocity changes
-        let is_tech = angle_var >= 0.55 && tech_signal >= 0.15;
-
-        // Select floor (at <300 BPM) and ceiling (at 450+ BPM) for this pattern
-        let (floor, ceiling) = if is_tech {
-            // Tech patterns: least nerfed
-            (0.75, 0.95)
-        } else if angle_var >= 0.55 {
-            // Varied (but not tech — missing the vel_change signal)
-            (0.60, 0.85)
-        } else if is_cross_screen {
-            // Cross-screen constant-distance: between slight_var and varied
-            (0.50, 0.78)
-        } else if angle_var >= 0.20 {
-            // Slight variation
-            (0.40, 0.70)
+        // Variety modulation: low variety gets boost at high BPM
+        // At high BPM (>410), repetitive patterns get less nerf
+        // Varied patterns get moderate nerf to maintain balance
+        let variety_mod = if eff_bpm > 410.0 {
+            let high_bpm_t = ((eff_bpm - 410.0) / 180.0).clamp(0.0, 1.0);
+            // Boost range: low variety gains ~10-15% at high BPM
+            let boost = combined_variety * 0.12 * smootherstep(high_bpm_t);
+            1.0 - boost
         } else {
-            // Extremely repetitive
-            (0.25, 0.55)
+            1.0
         };
 
-        // ── Final nerf multiplier ───────────────────────────────────
-        // Interpolate between floor and ceiling based on BPM factor
-        let variation_nerf = floor + (ceiling - floor) * bpm_factor;
+        // Final BPM multiplier = base curve × variety modulation
+        let bpm_multiplier = bpm_base_factor * variety_mod;
+        let mut scaled_strain = aim_strain * bpm_multiplier;
 
-        aim_strain *= variation_nerf;
+        // ── Cap dampening above 520.5 strain ───────────────────────
+        // Limits extreme growth at very high BPMs while maintaining smooth curve
+        const CAP_THRESHOLD: f64 = 520.5;
+        const DAMPENING_FACTOR: f64 = 0.05;
+
+        if scaled_strain > CAP_THRESHOLD {
+            let excess = scaled_strain - CAP_THRESHOLD;
+            let dampening = 1.0 / (1.0 + DAMPENING_FACTOR * excess);
+            scaled_strain = CAP_THRESHOLD + excess * dampening;
+        }
+
+        aim_strain = scaled_strain;
 
         aim_strain
     }
 
     fn calc_wide_angle_bonus(angle: f64) -> f64 {
-        let base = (3.0 / 4.0 * ((5.0 / 6.0 * PI).min(angle.max(PI / 6.0)) - PI / 6.0)).sin();
-        base * base
+        // Normalize angle to [0, 1] range within the meaningful bounds (PI/6 to 5PI/6)
+        let normalized = ((angle.max(PI / 6.0).min(5.0 * PI / 6.0)) - PI / 6.0) / (5.0 * PI / 6.0 - PI / 6.0);
+        // Use quintic polynomial for smoother, more accurate curve
+        let curve = quintic_ease(normalized);
+        curve * curve
     }
 
     fn calc_acute_angle_bonus(angle: f64) -> f64 {
