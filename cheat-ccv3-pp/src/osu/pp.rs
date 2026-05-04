@@ -949,10 +949,8 @@ fn calculate_effective_misses(attrs: &OsuDifficultyAttributes, state: &OsuScoreS
 
     let mut effective_misses = combo_based_miss_count.max(state.n_misses as f64);
 
-    // CC V3: For OD 0, treat each n_50 as 1 effective miss
-    if (attrs.od - 0.0).abs() < 0.01 {
-        effective_misses += state.n50 as f64;
-    }
+    // CC V3: For all OD's, treat each n_50 as 1 effective miss
+    effective_misses += state.n50 as f64;
 
     effective_misses
 }
