@@ -270,7 +270,7 @@ impl AimRxEvaluator {
         // Dampening cap above 520.5 strain limits extreme growth
         // ════════════════════════════════════════════════════════════
 
-        let eff_bpm = 30_000.0 / osu_curr_obj.strain_time;
+        let eff_bpm = (30_000.0 / osu_curr_obj.strain_time).min(520.5);
 
         // ── Variety measurement ────────────────────────────────────
         let (angle_mean, angle_stddev, angle_n) =

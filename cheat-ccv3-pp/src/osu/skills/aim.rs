@@ -338,7 +338,9 @@ impl AimEvaluator {
         //   - cap dampening above 520.5 strain
         // ════════════════════════════════════════════════════════════
 
-        let eff_bpm = 30_000.0 / osu_curr_obj.strain_time;
+        // Effective BPM is capped at 520.5 to prevent extreme values from very short strain times
+        // This cap ensures that patterns with strain times corresponding to >520.5 BPM do not produce disproportionately high aim strains.
+        let eff_bpm = (30_000.0 / osu_curr_obj.strain_time).min(520.5);
 
         // ── Variety measurement (angle + distance) ──────────────────
         let (angle_mean, angle_stddev, angle_n) =
@@ -397,6 +399,10 @@ impl AimEvaluator {
 
         // ── Cap dampening above 520.5 strain ───────────────────────
         // Limits extreme growth at very high BPMs while maintaining smooth curve
+        // The cap threshold is set at 520.5, which corresponds to the effective BPM cap. 
+        // This ensures that strains corresponding to BPMs above 520.5 do not produce disproportionately high values.
+        // TODO: Use claude to check all code and fix any remaining issues with this cap implementation, 
+        // ensuring it integrates smoothly with the overall scaling system.
         const CAP_THRESHOLD: f64 = 520.5;
         const DAMPENING_FACTOR: f64 = 0.05;
 
