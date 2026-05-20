@@ -210,6 +210,7 @@ impl AimEvaluator {
     const ACUTE_ANGLE_MULTIPLIER: f64 = 2.0;
     const SLIDER_MULTIPLIER: f64 = 0.0; // Sliders give zero PP.
     const VELOCITY_CHANGE_MULTIPLIER: f64 = 0.7;
+    const GUARANTEED_SCALING_FACTOR: f64 = 0.94; // Guarantees that aim will never be buffed 
 
     fn evaluate_diff_of(
         curr: &OsuDifficultyObject<'_>,
@@ -461,9 +462,10 @@ impl AimEvaluator {
             scaled_strain = CAP_THRESHOLD + excess * dampening;
         }
 
-        aim_strain = scaled_strain;
+        // Apply the guaranteed scaling factor multiplier right before returning the result
+        aim_strain = scaled_strain * Self::GUARANTEED_SCALING_FACTOR;
 
-        aim_strain
+        aim_strain 
     }
 
     fn calc_wide_angle_bonus(angle: f64) -> f64 {
