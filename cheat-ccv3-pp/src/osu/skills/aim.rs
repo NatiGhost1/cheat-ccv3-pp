@@ -397,6 +397,55 @@ impl AimEvaluator {
         let bpm_multiplier = bpm_base_factor * variety_mod;
         let mut scaled_strain = aim_strain * bpm_multiplier;
 
+        // ── Natighost Pattern Nerf ─────────────────────────────────
+        // Based on analysis of PookieNati / Aim Assist Farm maps.
+        // Detects cheese patterns where a perfectly stacked note (near-zero movement) 
+        // is followed immediately by a massive cross-screen snap at exceptionally 
+        // short delta times (e.g., 65ms / 1/4th beat at 230 BPM), or vice-versa.
+        // These exploit the lack of deceleration requirement to artificially inflate aim strain.
+        if curr.delta_time < 80.0 {
+            if let Some(prev_obj) = previous(curr, diff_objects, 0) {
+                if prev_obj.delta_time < 80.0 {
+                    let prev_strain = prev_obj.aim_strain;
+                    
+                    // Case 1: Stack into a massive jump
+                    if prev_strain < 0.5 && curr.aim_strain > 1.5 {
+                        let ratio = prev_strain / curr.aim_strain;
+                        // Scale down heavily. Perfectly stacked (0) into a spike hits the maximum 0.25x nerf factor.
+                        let nerf_factor = 0.25 + 0.75 * (ratio / 0.3);
+                        scaled_strain *= nerf_factor.clamp(0.25, 1.0);
+                    }
+                    // Case 2: Massive jump into a stack (cheesing deceleration/stopping power)
+                    else if curr.aim_strain < 0.5 && prev_strain > 1.5 {
+                        let ratio = curr.aim_strain / prev_strain;
+                        let nerf_factor = 0.4 + 0.6 * (ratio / 0.3);
+                        scaled_strain *= nerf_factor.clamp(0.4, 1.0);
+                    }
+                }
+            }
+        }
+
+        // ── Wide-to-Acute Angle Transition Nerf ────────────────────
+        // Penalizes patterns that exploit radical angle switches back-and-forth across consecutive notes.
+        // This targets maps that stack high wide-angle bonuses (linear flow) directly adjacent to 
+        // high acute-angle bonuses (sharp snaps/turnarounds), which hyper-inflate cumulative aim strain.
+        if let (Some(curr_angle), Some(prev_angle)) = (osu_curr_obj.dists.angle, osu_last_obj.dists.angle) {
+            let curr_wide = Self::calc_wide_angle_bonus(curr_angle);
+            let curr_acute = Self::calc_acute_angle_bonus(curr_angle);
+            let prev_wide = Self::calc_wide_angle_bonus(prev_angle);
+            let prev_acute = Self::calc_acute_angle_bonus(prev_angle);
+
+            // Severity spikes when transitioning directly between full fluid flow and a full turnaround
+            let transition_severity = (curr_wide * prev_acute).max(curr_acute * prev_wide);
+
+            if transition_severity > 0.1 {
+                // The nerf scales up at higher speeds where snapping tools and cursor mechanics yield unrealistic difficulty spikes
+                let speed_factor = (125.0 / osu_curr_obj.strain_time.max(40.0)).clamp(0.5, 1.5);
+                let nerf_factor = 1.0 - 0.22 * transition_severity * speed_factor;
+                scaled_strain *= nerf_factor.clamp(0.68, 1.0);
+            }
+        }
+
         // ── Cap dampening above 520.5 strain ───────────────────────
         // Limits extreme growth at very high BPMs while maintaining smooth curve
         // The cap threshold is set at 520.5, which corresponds to the effective BPM cap. 
