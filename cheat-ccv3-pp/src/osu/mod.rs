@@ -3,7 +3,7 @@ mod osu_object;
 mod pp;
 mod scaling_factor;
 mod score_state;
-mod strains;
+mod local_sr;
 mod skills;
 pub(crate) mod marathon;
 
