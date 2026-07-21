@@ -1,4 +1,4 @@
-use std::f64::consts::{FRAC_PI_2, PI};
+use std::f64::consts::PI;
 
 use crate::{osu::difficulty_object::OsuDifficultyObject, util::CompactVec};
 
@@ -174,6 +174,7 @@ fn windowed_dist_stats(
 
 /// Cubic smoothstep: smooth interpolation from 0 to 1 over [0, 1]
 /// More accurate and numerically stable than sine for normalized ranges
+#[allow(dead_code)]
 #[inline]
 fn smoothstep(t: f64) -> f64 {
     let t = t.clamp(0.0, 1.0);
@@ -190,6 +191,7 @@ fn smootherstep(t: f64) -> f64 {
 
 /// Normalized sigmoid-like curve: smooth S-curve from 0 to 1
 /// Better than sine for modeling difficulty curves
+#[allow(dead_code)]
 #[inline]
 fn sigmoid_curve(x: f64, steepness: f64) -> f64 {
     1.0 / (1.0 + (-steepness * x).exp())
@@ -208,6 +210,7 @@ struct AimEvaluator;
 impl AimEvaluator {
     const WIDE_ANGLE_MULTIPLIER: f64 = 1.35;
     const ACUTE_ANGLE_MULTIPLIER: f64 = 2.0;
+    #[allow(dead_code)]
     const SLIDER_MULTIPLIER: f64 = 0.0; // Sliders give zero PP.
     const VELOCITY_CHANGE_MULTIPLIER: f64 = 0.7;
     const GUARANTEED_SCALING_FACTOR: f64 = 0.94; // Guarantees that aim will never be buffed 
@@ -344,7 +347,7 @@ impl AimEvaluator {
         let eff_bpm = (30_000.0 / osu_curr_obj.strain_time).min(520.5);
 
         // ── Variety measurement (angle + distance) ──────────────────
-        let (angle_mean, angle_stddev, angle_n) =
+        let (_angle_mean, angle_stddev, angle_n) =
             windowed_angle_stats(osu_curr_obj, diff_objects, ANGLE_WINDOW);
         let (dist_mean, dist_stddev, dist_n) =
             windowed_dist_stats(osu_curr_obj, diff_objects, ANGLE_WINDOW);
@@ -405,21 +408,21 @@ impl AimEvaluator {
         // short delta times (e.g., 65ms / 1/4th beat at 230 BPM), or vice-versa.
         // These exploit the lack of deceleration requirement to artificially inflate aim strain.
         if curr.delta_time < 80.0 {
-            if let Some(prev_obj) = previous(curr, diff_objects, 0) {
+            if let Some(prev_obj) = previous(diff_objects, curr.idx, 0) {
                 if prev_obj.delta_time < 80.0 {
-                    let prev_strain = prev_obj.aim_strain;
-                    
+                    // Approximate previous aim strain via velocity if stored aim_strain isn't available.
+                    let prev_strain = prev_obj.dists.lazy_jump_dist / prev_obj.strain_time;
+
                     // Case 1: Stack into a massive jump
-                    if prev_strain < 0.5 && curr.aim_strain > 1.5 {
-                        let ratio = prev_strain / curr.aim_strain;
-                        // Scale down heavily. Perfectly stacked (0) into a spike hits the maximum 0.25x nerf factor.
-                        let nerf_factor = 0.25 + 0.75 * (ratio / 0.3);
+                    if prev_strain < 0.5 && aim_strain > 1.5 {
+                        let ratio = prev_strain / aim_strain;
+                        let nerf_factor: f64 = 0.25 + 0.75 * (ratio / 0.3);
                         scaled_strain *= nerf_factor.clamp(0.25, 1.0);
                     }
                     // Case 2: Massive jump into a stack (cheesing deceleration/stopping power)
-                    else if curr.aim_strain < 0.5 && prev_strain > 1.5 {
-                        let ratio = curr.aim_strain / prev_strain;
-                        let nerf_factor = 0.4 + 0.6 * (ratio / 0.3);
+                    else if aim_strain < 0.5 && prev_strain > 1.5 {
+                        let ratio = aim_strain / prev_strain;
+                        let nerf_factor: f64 = 0.4 + 0.6 * (ratio / 0.3);
                         scaled_strain *= nerf_factor.clamp(0.4, 1.0);
                     }
                 }

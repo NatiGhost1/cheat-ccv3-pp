@@ -771,7 +771,7 @@ impl OsuPpInner {
         // CC V3: Circle size based nerf with exponential decay
         // CS <= 3.0: exponential decay from 0.78 (at CS 3.0) to 0.68 (at CS 0, cap)
         // CS >= 5.8: exponential growth from 0.8 (at CS 5.8) to 0.9 (at CS 10, cap)
-        let cs = (self.map.cs as f64).clamp(0.0, 10.0);
+        let cs = (self.attrs.cs as f64).clamp(0.0, 10.0);
         let cs_nerf = if cs <= 3.0 {
             // Exponential decay from 0.78 at CS 3.0 to 0.68 at CS 0
             let normalized = (3.0 - cs) / 3.0; // 0 at CS 3.0, 1 at CS 0
@@ -806,7 +806,7 @@ impl OsuPpInner {
     /// that sections are generally harder to hit, so a miss is more likely in a difficult area.
     fn accuracy_drop_based_miss_weight(&self, _combo_ratio: f64) -> f64 {
         let total_hits = self.total_hits();
-        if total_hits == 0 {
+        if total_hits == 0.0 {
             return 0.5;
         }
 
@@ -818,15 +818,15 @@ impl OsuPpInner {
         // Compute weighted accuracy sum and drop
         let actual_weighted_sum = total_300 * 1.0 + total_100 * 0.9 + total_50 * 0.85;
         let max_possible_sum = total_hits as f64 * 1.0; // all 300s = 1.0 per note
-        let actual_acc_drop = max_possible_sum - actual_weighted_sum;
+        let _actual_acc_drop = max_possible_sum - actual_weighted_sum;
 
         // Compute average hits per note
-        let avg_weight_per_note = actual_weighted_sum / total_hits as f64;
+        let _avg_weight_per_note = actual_weighted_sum / total_hits as f64;
 
         // If average weight is notably low (many 100s/50s), map sections are harder
         // threshold of 0.95 = very few misses/inaccuracies, map is easy
         // threshold of 0.85 = many misses/inaccuracies, map is hard
-        let hardness_ratio = avg_weight_per_note.min(1.0);
+        let hardness_ratio = (_avg_weight_per_note).min(1.0);
 
         // If hardness indicates a hard map (closer to 0.8), apply higher decay
         // Smooth scaling: 1.0 weight → 0.50 multiplier, 0.8 weight → 0.75 multiplier
@@ -894,7 +894,10 @@ impl OsuPpInner {
                 // Convert weight to strain_relative: 0.75 → 1.0 (hardest), 0.50 → 0.0 (easiest)
                 ((1.0 - acc_drop_weight) / 0.25).clamp(0.0, 1.0)
             }
-        }
+        } else {
+            let acc_drop_weight = self.accuracy_drop_based_miss_weight(combo_ratio);
+            ((1.0 - acc_drop_weight) / 0.25).clamp(0.0, 1.0)
+        };
 
         // Max loss at midpoint: 40% easy → 25% peak
         let max_loss_at_midpoint = 0.40 - 0.15 * strain_relative;

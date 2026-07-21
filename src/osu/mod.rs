@@ -213,7 +213,7 @@ impl<'map> OsuStars<'map> {
         attrs.local_sr_per_minute = marathon::local_sr_per_minute(&aim_peaks, &speed_peaks);
 
         // CC V3: Compute per-15-second local SR for more granular miss weighting.
-        attrs.local_sr_per_15s = section_strains::local_sr_per_15s(&aim_peaks, &speed_peaks);
+        attrs.local_sr_per_15s = marathon::local_sr_per_15s(&aim_peaks, &speed_peaks);
 
         attrs
     }
@@ -300,6 +300,7 @@ fn calculate_skills(params: OsuStars<'_>) -> (Skills, OsuDifficultyAttributes) {
 
     let mut attrs = OsuDifficultyAttributes {
         ar: map_attrs.ar,
+        cs: map_attrs.cs,
         hp: map_attrs.hp,
         od: map_attrs.od,
         ..Default::default()
@@ -592,6 +593,8 @@ pub struct OsuDifficultyAttributes {
     pub speed_note_count: f64,
     /// The approach rate.
     pub ar: f64,
+    /// The circle size.
+    pub cs: f64,
     /// The overall difficulty
     pub od: f64,
     /// The health drain rate.

@@ -3,7 +3,7 @@
 // Port of aim_rx.rs from old-ccv3-pp. Adapted for this crate's
 // API: fields on curr.dists.*, previous() as a free function, no FloatExt.
 
-use std::f64::consts::{FRAC_PI_2, PI};
+use std::f64::consts::PI;
 
 use crate::osu::difficulty_object::OsuDifficultyObject;
 
@@ -21,6 +21,7 @@ fn smootherstep(t: f64) -> f64 {
 }
 
 /// Cubic smoothstep: smooth interpolation for normalized ranges
+#[allow(dead_code)]
 #[inline]
 fn smoothstep(t: f64) -> f64 {
     let t = t.clamp(0.0, 1.0);
@@ -83,9 +84,13 @@ impl AimRxEvaluator {
     const CONSTANT_DIST_BPM_STRAIN_TIME: f64 = 85.7;
 
     const ANGLE_WINDOW: usize = 6;
+    #[allow(dead_code)]
     const FLOW_MEAN_ANGLE_THRESHOLD: f64 = 2.0;
+    #[allow(dead_code)]
     const FLOW_STDDEV_THRESHOLD: f64 = 0.3;
+    #[allow(dead_code)]
     const FLOW_MAX_NERF: f64 = 0.50;
+    #[allow(dead_code)]
     const FLOW_BPM_STRAIN_TIME: f64 = 36.58;
 
     pub(crate) fn evaluate_diff_of(
@@ -273,7 +278,7 @@ impl AimRxEvaluator {
         let eff_bpm = (30_000.0 / osu_curr_obj.strain_time).min(520.5);
 
         // ── Variety measurement ────────────────────────────────────
-        let (angle_mean, angle_stddev, angle_n) =
+        let (_angle_mean, angle_stddev, angle_n) =
             windowed_angle_stats(osu_curr_obj, diff_objects, Self::ANGLE_WINDOW);
 
         let angle_var = if angle_n >= 3 {
@@ -283,7 +288,7 @@ impl AimRxEvaluator {
         };
 
         // Calculate distance variance for relax as well
-        let dist_mean = osu_curr_obj.dists.lazy_jump_dist;
+        let _dist_mean = osu_curr_obj.dists.lazy_jump_dist;
         let dist_var = 0.5; // Default neutral for relax; could be calculated if needed
 
         let combined_variety = (angle_var + dist_var) / 2.0;

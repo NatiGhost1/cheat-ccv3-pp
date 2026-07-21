@@ -1,10 +1,12 @@
+#![allow(dead_code)]
+
 // 15-second section strain peaks for miss weighting.
 //
 // Similar to local_sr_per_minute but bins strain peaks into 15-second sections
 // instead of 1-minute sections. Used for analyzing difficulty variations
 // within shorter time windows for more granular miss weight estimation.
 
-use super::marathon::{difficulty_value_from_peaks, star_from_aim_speed};
+use super::marathon::star_from_aim_speed;
 
 const PEAK_SECTION_LEN_MS: f64 = 400.0;
 const SECTION_MS: f64 = 15_000.0;

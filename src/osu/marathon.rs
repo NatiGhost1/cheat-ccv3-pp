@@ -43,7 +43,7 @@ fn lerp(a: f64, b: f64, t: f64) -> f64 {
 }
 
 /// Replicates OsuStrainSkill::difficulty_value on a raw peak slice.
-fn difficulty_value_from_peaks(peaks: &[f64]) -> f64 {
+pub(crate) fn difficulty_value_from_peaks(peaks: &[f64]) -> f64 {
     let mut v: Vec<f64> = peaks.iter().copied().filter(|x| *x > 0.0).collect();
     if v.is_empty() {
         return 0.0;
@@ -78,7 +78,7 @@ fn difficulty_to_performance(difficulty: f64) -> f64 {
     (5.0 * (difficulty / 0.0675).max(1.0) - 4.0).powi(3) / 100_000.0
 }
 
-fn star_from_aim_speed(aim_peaks: &[f64], speed_peaks: &[f64]) -> f64 {
+pub(crate) fn star_from_aim_speed(aim_peaks: &[f64], speed_peaks: &[f64]) -> f64 {
     let aim_dv = difficulty_value_from_peaks(aim_peaks);
     let speed_dv = difficulty_value_from_peaks(speed_peaks);
 
@@ -112,6 +112,27 @@ pub(crate) fn local_sr_per_minute(strains_aim: &[f64], strains_speed: &[f64]) ->
     for k in 0..n_minutes {
         let start = k * peaks_per_min;
         let end = ((k + 1) * peaks_per_min).min(len);
+        let aim_slice = &strains_aim[start..end];
+        let speed_slice = &strains_speed[start..end];
+        out.push(star_from_aim_speed(aim_slice, speed_slice));
+    }
+    out
+}
+
+/// Bin raw 400 ms strain peaks into per-15-second local star ratings.
+pub(crate) fn local_sr_per_15s(strains_aim: &[f64], strains_speed: &[f64]) -> Vec<f64> {
+    let section_len_ms = 15_000.0;
+    let peaks_per_section = (section_len_ms / PEAK_SECTION_LEN_MS).round() as usize; // ~38
+    let len = strains_aim.len().min(strains_speed.len());
+    if len == 0 {
+        return Vec::new();
+    }
+    let n_sections = (len + peaks_per_section - 1) / peaks_per_section;
+
+    let mut out = Vec::with_capacity(n_sections);
+    for k in 0..n_sections {
+        let start = k * peaks_per_section;
+        let end = ((k + 1) * peaks_per_section).min(len);
         let aim_slice = &strains_aim[start..end];
         let speed_slice = &strains_speed[start..end];
         out.push(star_from_aim_speed(aim_slice, speed_slice));
