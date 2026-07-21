@@ -140,6 +140,12 @@ impl<'map> CatchPP<'map> {
         self
     }
 
+    /// Specify the amount of fruit / droplet misses of the play.
+    #[inline]
+    pub fn n_misses(self, n_misses: usize) -> Self {
+        self.misses(n_misses)
+    }
+
     /// Amount of passed objects for partial plays, e.g. a fail.
     ///
     /// If you want to calculate the performance after every few objects, instead of
