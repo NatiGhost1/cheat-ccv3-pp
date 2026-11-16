@@ -148,6 +148,10 @@ impl<'map> OsuStars<'map> {
         let speed_notes = speed.relevant_note_count();
         let mut speed_rating = speed.difficulty_value().sqrt() * DIFFICULTY_MULTIPLIER;
 
+        if !mods.rx() {
+            speed_rating *= 0.2;
+        }
+
         let mut flashlight_rating = flashlight.difficulty_value().sqrt() * DIFFICULTY_MULTIPLIER;
 
         let slider_factor = if aim_rating > 0.0 {
@@ -166,17 +170,6 @@ impl<'map> OsuStars<'map> {
         if mods.td() && is_4mod {
             aim_rating = aim_rating.powf(1.0);
             flashlight_rating = flashlight_rating.powf(1.0);
-        }
-
-        if mods.td() && is_4mod && mods.rx() {
-            aim_rating = 1.0;
-            flashlight_rating *= 0.7;
-        }
-
-        if mods.rx() {
-            aim_rating *= 1.0;
-            speed_rating = 0.0;
-            flashlight_rating *= 0.7;
         }
 
         let base_aim_performance = (5.0 * (aim_rating / 0.0675).max(1.0) - 4.0).powi(3) / 100_000.0;

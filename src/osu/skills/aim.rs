@@ -79,8 +79,10 @@ impl StrainSkill for Aim {
         } else {
             AimEvaluator::evaluate_diff_of(curr, diff_objects, self.with_sliders)
         };
+        let density_multiplier =
+            super::density::DensitySkill::multiplier(curr, diff_objects, self.has_relax);
 
-        self.curr_strain += eval_result * Self::SKILL_MULTIPLIER;
+        self.curr_strain += eval_result * density_multiplier * Self::SKILL_MULTIPLIER;
 
         self.curr_strain
     }
@@ -214,6 +216,7 @@ impl AimEvaluator {
     const SLIDER_MULTIPLIER: f64 = 0.0; // Sliders give zero PP.
     const VELOCITY_CHANGE_MULTIPLIER: f64 = 0.7;
     const GUARANTEED_SCALING_FACTOR: f64 = 0.94; // Guarantees that aim will never be buffed 
+    const PATTERN_NERF_MULTIPLIER: f64 = 0.30;
 
     fn evaluate_diff_of(
         curr: &OsuDifficultyObject<'_>,
@@ -466,7 +469,8 @@ impl AimEvaluator {
         }
 
         // Apply the guaranteed scaling factor multiplier right before returning the result
-        aim_strain = scaled_strain * Self::GUARANTEED_SCALING_FACTOR;
+        aim_strain =
+        scaled_strain * Self::GUARANTEED_SCALING_FACTOR * Self::PATTERN_NERF_MULTIPLIER;
 
         aim_strain 
     }

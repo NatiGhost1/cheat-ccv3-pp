@@ -584,9 +584,7 @@ impl OsuPpInner {
         // CC V3: combo scaling removed from aim — handled by cc_v3_miss_multiplier
         // on the final pp instead. Only flashlight retains combo scaling.
 
-        let ar_factor = if self.mods.rx() {
-            0.0
-        } else if self.attrs.ar > 10.33 {
+        let ar_factor = if self.attrs.ar > 10.33 {
             0.3 * (self.attrs.ar - 10.33)
         } else if self.attrs.ar < 8.0 {
             0.05 * (8.0 - self.attrs.ar)
@@ -626,10 +624,6 @@ impl OsuPpInner {
     }
 
     fn compute_speed_value(&self) -> f64 {
-        if self.mods.rx() {
-            return 0.0;
-        }
-
         let mut speed_value =
             (5.0 * (self.attrs.speed / 0.0675).max(1.0) - 4.0).powi(3) / 100_000.0;
 
@@ -697,10 +691,6 @@ impl OsuPpInner {
     }
 
     fn compute_accuracy_value(&self) -> f64 {
-        if self.mods.rx() {
-            return 0.0;
-        }
-
         // * This percentage only considers HitCircles of any value - in this part
         // * of the calculation we focus on hitting the timing hit window.
         let amount_hit_objects_with_acc = self.attrs.n_circles;
@@ -728,14 +718,16 @@ impl OsuPpInner {
             .powf(0.3)
             .min(1.15);
 
-        // * Increasing the accuracy value by object count for Blinds isn't ideal, so the minimum buff is given.
-        if self.mods.hd() {
-            acc_value *= 1.08;
-        }
+        let map_max_combo = self.attrs.max_combo;
 
-        if self.mods.fl() {
-            acc_value *= 1.02;
-        }
+        let accuracy_multiplier = if self.mods.rx() {
+            1.0
+        } else if map_max_combo <= 500 {
+            0.38 + 0.09 * better_acc_percentage.powf(10.0)
+        } else {
+            0.28 + 0.09 * better_acc_percentage.powf(10.0)
+        };
+        acc_value *= accuracy_multiplier;
 
         acc_value
     }
@@ -1044,6 +1036,35 @@ mod test {
         });
 
         (map, attrs.to_owned())
+    }
+
+    #[test]
+    fn relax_keeps_speed_and_accuracy_values() {
+        const RELAX: u32 = 1 << 7;
+        let (map, _) = test_data();
+        let attrs = OsuStars::new(map).mods(RELAX).calculate();
+
+        assert!(attrs.speed > 0.0);
+
+        let performance = OsuPP::new(map)
+            .mods(RELAX)
+            .attributes(attrs)
+            .accuracy(100.0)
+            .calculate();
+
+        assert!(performance.pp_speed > 0.0);
+        assert!(performance.pp_acc > 0.0);
+    }
+
+    #[test]
+    fn vanilla_speed_rating_is_reduced_relative_to_relax() {
+        const RELAX: u32 = 1 << 7;
+        let (map, _) = test_data();
+        let vanilla_speed = OsuStars::new(map).calculate().speed;
+        let relax_speed = OsuStars::new(map).mods(RELAX).calculate().speed;
+
+        assert!(vanilla_speed > 0.0);
+        assert!((vanilla_speed - relax_speed * 0.2).abs() < 1e-10);
     }
 
     /// Checks all remaining hitresult combinations w.r.t. the given parameters

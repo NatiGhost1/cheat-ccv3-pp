@@ -1,5 +1,6 @@
 mod aim;
 pub(crate) mod aim_rx;
+mod density;
 mod flashlight;
 mod speed;
 mod traits;
